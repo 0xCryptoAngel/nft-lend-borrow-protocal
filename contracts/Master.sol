@@ -3,8 +3,16 @@ pragma solidity ^0.8.9;
 
 // Uncomment this line to use console.log
 import "hardhat/console.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract NFTAave {
+
+    /// 
+    struct AdminSetting {
+        address[] verifiedCollections;
+        address feeTo;
+    }
+    AdminSetting private adminSetting;
 
     // Enum representing Pool status
     enum PoolType {
@@ -30,7 +38,7 @@ contract NFTAave {
         address owner;
         // status:: Pool status
         PoolStatus status;
-        // depositedAmount:: Inital pool size in wei
+        // depositedAmount:: Accumulated deposited amount
         uint256 depositedAmount;
         // borrowedAmount:: Total borrowed amount
         uint256 borrowedAmount;
@@ -94,6 +102,16 @@ contract NFTAave {
         newPool.maxDuration = _maxDuration;
         newPool.compound = _compound;
         newPool.collections = _collections;
+
+        newPool.owner = msg.sender;
+
+        newPool.depositedAmount = msg.value;
+        newPool.availableAmount  = msg.value;
+        newPool.usableAmount  = msg.value;
+        
+        newPool.depositedAt = block.timestamp;
+        newPool.createdAt = block.timestamp;
+        newPool.updatedAt = block.timestamp;
 
         poolOwners[totalPools] = msg.sender;
         totalPools ++;
