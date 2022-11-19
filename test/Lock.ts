@@ -24,6 +24,8 @@ describe("Lock", function () {
 
   describe("Deployment", function () {
     it("Should set the right unlockTime", async function () {
+      console.log(await ethers.provider.getBlockNumber());
+
       const { lock, unlockTime } = await loadFixture(deployOneYearLockFixture);
 
       expect(await lock.unlockTime()).to.equal(unlockTime);
