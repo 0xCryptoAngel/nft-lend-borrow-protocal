@@ -4,85 +4,34 @@ pragma solidity ^0.8.9;
 // Uncomment this line to use console.log
 import "hardhat/console.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "./interfaces/IPikachu.sol";
+import "./VerifySignature.sol";
 
-contract NFTAave {
+contract Pikachu is IPikachu, VerifySignature, Ownable {
 
-    /// 
-    struct AdminSetting {
-        address[] verifiedCollections;
-        address feeTo;
-    }
-    AdminSetting private adminSetting;
+    AdminSetting public adminSetting;
 
-    // Enum representing Pool status
-    enum PoolType {
-        Changeable,
-        Inchangeable
-    }
-
-    // Enum representing Pool status
-    enum PoolStatus {
-        Pending,
-        Ready,
-        Disabled
-    }
-    // Enum representing interest type
-    enum InterestType  {
-        Manual,
-        Dynamic
-    }
-
-    // pools:: array of pools
-    struct Pool {
-        // owner:: Pool creator
-        address owner;
-        // status:: Pool status
-        PoolStatus status;
-        // depositedAmount:: Accumulated deposited amount
-        uint256 depositedAmount;
-        // borrowedAmount:: Total borrowed amount
-        uint256 borrowedAmount;
-        // availableAmount:: Available amount
-        uint256 availableAmount;
-        // usableAmount:: Usable amount
-        uint256 usableAmount;
-        // nftLocked:: Number of locked NFTs
-        uint256 nftLocked;
-        // totalLiquidations:: Accumulated amount of liquidations
-        uint256 totalLiquidations;
-        // totalLoans:: Accumulated amount of loans
-        uint256 totalLoans;
-        // totalInterest:: Accumulated amount of interest
-        uint256 totalInterest;
-        // depositedAt:: Deposited timestamp
-        uint256 depositedAt;
-        // createdAt:: Created timestamp
-        uint256 createdAt;
-        // updatedAt:: Updated timestamp
-        uint256 updatedAt;
-        // lastLoanAt:: Last loan timestamp
-        uint256 lastLoanAt;
-        
-
-        // Properties used to create a pool
-
-        // loanToValue:: Loan to value of the NFT you want to give, in percentage, ex: 30
-        uint256 loanToValue;
-        // maxAmount:: May amount per loan you want to do, default should be pool size
-        uint256 maxAmount;
-        // interestType:: Dynamic will use our own model, if set to manual, you have to provide fees per day to pay
-        InterestType interestType;
-        // interestRate:: If interestType set to manual, provide interest rate per day, in %
-        uint256 interestRate;
-        // maxDuration:: max duration of a loan
-        uint256 maxDuration;
-        // compound:: if set to true, reinvest profit in pool, otherwise they are sent to your wallet
-        bool compound;
-        address[] collections;
-    }
     mapping (address => Pool) private pools;
     mapping (uint256 => address) public poolOwners;
+    // totalPools:: total number of pools
     uint256 public totalPools;
+
+    mapping (address => mapping (address => Loan)) loans;
+
+    modifier onlyCreator(uint256 poolId) {
+        require(poolOwners[poolId] == msg.sender);
+        _;
+    }
+
+    constructor (AdminSetting memory _adminSetting) {
+        updateAdminSetting(_adminSetting);
+    }
+
+    /// @notice Update system settings
+    function updateAdminSetting(AdminSetting memory _adminSetting) onlyOwner public {
+        adminSetting = _adminSetting;
+    }
 
     /// @notice Create a new pool with provided information
     function createPool(
@@ -94,6 +43,8 @@ contract NFTAave {
         bool _compound,
         address[] memory _collections
     ) external payable {
+        require(msg.value >= adminSetting.minDepositAmount, "createPool: Needs more coin to create pool");
+
         Pool storage newPool = pools[msg.sender];
         newPool.loanToValue = _loanToValue;
         newPool.maxAmount = _maxAmount;
@@ -123,5 +74,27 @@ contract NFTAave {
     
     function getPoolById (uint256 _poolId) public view returns (Pool memory) {
         return pools[poolOwners[_poolId]];
+    }
+
+    function borrow (address _poolOwner, address _collection, uint256 _tokenId, uint256 _duration, uint256 _amount, bytes memory _signature, uint256 _floorPrice, uint256 _blockNumber) external {
+        require(verify(owner(), _collection, _floorPrice, _blockNumber , _signature), "Invalid Transaction");
+        require(block.number - _blockNumber <= adminSetting.blockNumberSlippage, "Must have updated floor price!");
+        require(_floorPrice >= _amount * 2, "Can't borrow more than 60% of the floor price");
+
+        uint256 _i = 0;
+        bool validCollection = false;
+        for (_i = 0; _i < pools[_poolOwner].collections.length; _i++)
+            if (pools[_poolOwner].collections[_i] == _collection){
+                validCollection = true;
+                break;
+            }
+        require(validCollection, "Unacceptable NFT collection");
+
+        IERC721(_collection).safeTransferFrom(msg.sender, address(this), _tokenId);
+        
+        (bool sent, bytes memory data) = msg.sender.call{value: _floorPrice}("");
+        require(sent, "Failed to send Ether");
+
+
     }
 }
