@@ -38,7 +38,8 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
         uint256 _loanToValue,
         uint256 _maxAmount,
         InterestType _interestType,
-        uint256 _interestRate,
+        uint256 _interestStartRate,
+        uint256 _interestCapRate,
         uint256 _maxDuration,
         bool _compound,
         address[] memory _collections
@@ -49,7 +50,8 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
         newPool.loanToValue = _loanToValue;
         newPool.maxAmount = _maxAmount;
         newPool.interestType = _interestType;
-        newPool.interestRate = _interestRate;
+        newPool.interestStartRate = _interestStartRate;
+        newPool.interestCapRate = _interestCapRate;
         newPool.maxDuration = _maxDuration;
         newPool.compound = _compound;
         newPool.collections = _collections;
@@ -58,7 +60,6 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
 
         newPool.depositedAmount = msg.value;
         newPool.availableAmount  = msg.value;
-        newPool.usableAmount  = msg.value;
         
         newPool.depositedAt = block.timestamp;
         newPool.createdAt = block.timestamp;
@@ -81,20 +82,123 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
         require(block.number - _blockNumber <= adminSetting.blockNumberSlippage, "Must have updated floor price!");
         require(_floorPrice >= _amount * 2, "Can't borrow more than 60% of the floor price");
 
+        Pool storage pool = pools[_poolOwner];
+        require(pool.status == PoolStatus.Ready, "The pool is not active at the moment");
+        require(pool.maxDuration >= _duration, "Request duration is longer than available duration");
+
         uint256 _i = 0;
         bool validCollection = false;
-        for (_i = 0; _i < pools[_poolOwner].collections.length; _i++)
-            if (pools[_poolOwner].collections[_i] == _collection){
+        for (_i = 0; _i < pool.collections.length; _i++)
+            if (pool.collections[_i] == _collection){
                 validCollection = true;
                 break;
             }
         require(validCollection, "Unacceptable NFT collection");
 
-        IERC721(_collection).safeTransferFrom(msg.sender, address(this), _tokenId);
+        require(_floorPrice * pool.loanToValue / 100 >= _amount, "Request amount exceeds the Loan Value");
+        require(pool.maxAmount >= _amount, "Request amount exceeds the max loanable amount");
         
-        (bool sent, bytes memory data) = msg.sender.call{value: _floorPrice}("");
+        require(loans[_poolOwner][msg.sender].status != LoanStatus.Borrowed, "You have unpaid loan from this pool");
+        
+        IERC721(_collection).safeTransferFrom(msg.sender, address(this), _tokenId);
+
+        (bool sent,) = msg.sender.call{value: _amount}("");
         require(sent, "Failed to send Ether");
 
+        // create loan object
+        
+        Loan storage newLoan = loans[_poolOwner][msg.sender];
 
+        newLoan.borrower = msg.sender;
+        newLoan.amount = _amount;
+        newLoan.duration = _duration;
+        newLoan.collection = _collection;
+        newLoan.tokenId = _tokenId;
+        newLoan.status = LoanStatus.Borrowed;
+        newLoan.blockNumber = block.number;
+        newLoan.interestType = pool.interestType;
+        newLoan.interestStartRate = pool.interestStartRate;
+        newLoan.interestCapRate = pool.interestCapRate;
+
+        // update pool
+        pool.borrowedAmount += _amount;
+        pool.availableAmount -= _amount;
+        pool.nftLocked ++;
+        pool.totalLoans += _amount;
+        pool.lastLoanAt = block.timestamp;
+    }
+
+    function sqrt(uint256 x) public pure returns (uint256 y) {
+        uint256 z = (x + 1) / 2;
+        y = x;
+        while (z < y) {
+            y = z;
+            z = (x / z + z) / 2;
+        }
+    }
+
+    /// @notice Calcuate required amount to repay for loan parameters
+    /// @dev The rates are described in basis points
+    /// @param _durationBlock The number of blocks that loan has applied
+    /// @param _interestType Interest rate per day in basis point applied to current loan
+    /// @param _amount Loan value in wei
+    function calculateRepayAmount(uint256 _durationBlock, InterestType _interestType, uint256 _interestStartRate, uint256 _interestCapRate, uint256 _amount) public pure returns (uint256) {
+        uint256 durationInDays = _durationBlock/ 7200;
+        
+        if (_interestType == InterestType.Linear) {
+            return _amount + _amount * (_interestStartRate + durationInDays * _interestCapRate) / 10000;
+        } else {
+            return _amount + _amount * _interestStartRate / 10000 + _amount* sqrt(durationInDays * 10000) * _interestCapRate / 1000000;
+        }
+        
+    }
+
+    /// @notice Replay for a loan with Ether and update pool, loan
+    /// @dev Explain to a developer any extra details
+    /// @param _poolOwner Pool that msg.sender used
+    function repay(address _poolOwner) external payable {
+        uint256 repaidAmount = msg.value;
+
+        Pool storage pool = pools[_poolOwner];
+        Loan storage loan = loans[_poolOwner][msg.sender];
+
+        require(loan.status == LoanStatus.Borrowed, "Invalid loan to repay");
+        
+        uint256 requiredAmount = this.calculateRepayAmount(block.number - loan.blockNumber, loan.interestType, loan.interestStartRate, loan.interestCapRate, loan.amount);
+
+        require(repaidAmount>= requiredAmount, "Not enough amount to repay the loan");
+
+        // Resend rest of the Ether to borrower
+        (bool sent,) = msg.sender.call{value: repaidAmount - requiredAmount}("");
+        require(sent, "Failed to return Ether to msg.sender");
+
+        uint256 netInterest = requiredAmount - loan.amount;
+        uint256 platformFee = netInterest * adminSetting.platformFee / 100;
+        uint256 ownerInterest = netInterest - platformFee;
+
+        
+        // Send platform Fee to vault address
+        (bool sentToVault,) = msg.sender.call{value: platformFee}("");
+        require(sentToVault, "Failed to return Ether to msg.sender");
+
+
+        // Return NFT collateralized
+        IERC721(loan.collection).safeTransferFrom(address(this), msg.sender, loan.tokenId);
+
+
+        // Update pool
+        if (pool.compound == true)
+            pool.availableAmount += ownerInterest;
+        else {
+            (bool sentToPoolOnwer,) = msg.sender.call{value: ownerInterest}("");
+            require(sentToPoolOnwer, "Failed to send Ether to sentToPoolOnwer");
+        }
+
+        pool.availableAmount += loan.amount;
+        pool.totalInterest += ownerInterest;
+        pool.updatedAt = block.timestamp;
+
+        // Finalize loan
+        loan.status = LoanStatus.Repaid;
     }
 }

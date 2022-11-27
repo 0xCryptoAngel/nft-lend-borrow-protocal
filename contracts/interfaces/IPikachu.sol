@@ -27,14 +27,14 @@ interface IPikachu {
 
     // Enum representing Pool status
     enum PoolStatus {
-        Pending,
+        None,
         Ready,
         Disabled
     }
     // Enum representing interest type
     enum InterestType  {
-        Manual,
-        Dynamic
+        Linear,
+        Curved
     }
 
     // pools:: array of pools
@@ -49,8 +49,6 @@ interface IPikachu {
         uint256 borrowedAmount;
         // availableAmount:: Available amount
         uint256 availableAmount;
-        // usableAmount:: Usable amount
-        uint256 usableAmount;
         // nftLocked:: Number of locked NFTs
         uint256 nftLocked;
         // totalLiquidations:: Accumulated amount of liquidations
@@ -77,8 +75,10 @@ interface IPikachu {
         uint256 maxAmount;
         // interestType:: Dynamic will use our own model, if set to manual, you have to provide fees per day to pay
         InterestType interestType;
-        // interestRate:: If interestType set to manual, provide interest rate per day, in %
-        uint256 interestRate;
+        // interestStartRate:: If interestType set to manual, provide interest rate per day, in basis point
+        uint256 interestStartRate;
+        // interestCapRate:: This would be the second parameter of the rate calculation
+        uint256 interestCapRate;
         // maxDuration:: max duration of a loan
         uint256 maxDuration;
         // compound:: if set to true, reinvest profit in pool, otherwise they are sent to your wallet
@@ -108,6 +108,15 @@ interface IPikachu {
         uint256 tokenId;
         // status:: loan status
         LoanStatus status;
+        // blockNumber:: block number at loan timestamp
+        uint256 blockNumber;
+
+        // interestType:: Dynamic will use our own model, if set to manual, you have to provide fees per day to pay
+        InterestType interestType;
+        // interestStartRate:: If interestType set to manual, provide interest rate per day, in basis point
+        uint256 interestStartRate;
+        // interestCapRate:: This would be the second parameter of the rate calculation
+        uint256 interestCapRate;
     }
     
     /// @notice pool creation event
@@ -115,4 +124,7 @@ interface IPikachu {
 
     /// @notice pool update event
     event UpdatedPool(address indexed owner, uint256 indexed poolId);
+
+    function borrow (address _poolOwner, address _collection, uint256 _tokenId, uint256 _duration, uint256 _amount, bytes memory _signature, uint256 _floorPrice, uint256 _blockNumber) external;
+    function repay(address _poolOwner) external payable;
 }
