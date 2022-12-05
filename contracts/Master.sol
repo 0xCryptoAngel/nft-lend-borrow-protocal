@@ -9,6 +9,7 @@ import "./interfaces/IPikachu.sol";
 import "./VerifySignature.sol";
 
 contract Pikachu is IPikachu, VerifySignature, Ownable {
+    uint256 constant BLOCK_PER_DAY = 7200;
 
     AdminSetting public adminSetting;
 
@@ -66,6 +67,9 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
         newPool.updatedAt = block.timestamp;
 
         poolOwners[totalPools] = msg.sender;
+
+        emit CreatedPool(msg.sender, totalPools, newPool.depositedAmount);
+
         totalPools ++;
     }
 
@@ -116,6 +120,7 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
         newLoan.tokenId = _tokenId;
         newLoan.status = LoanStatus.Borrowed;
         newLoan.blockNumber = block.number;
+        newLoan.timestamp = block.timestamp;
         newLoan.interestType = pool.interestType;
         newLoan.interestStartRate = pool.interestStartRate;
         newLoan.interestCapRate = pool.interestCapRate;
@@ -126,6 +131,8 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
         pool.nftLocked ++;
         pool.totalLoans += _amount;
         pool.lastLoanAt = block.timestamp;
+
+        emit CreatedLoan(pool.owner, newLoan.borrower, newLoan.amount);
     }
 
     function sqrt(uint256 x) public pure returns (uint256 y) {
@@ -139,11 +146,11 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
 
     /// @notice Calcuate required amount to repay for loan parameters
     /// @dev The rates are described in basis points
-    /// @param _durationBlock The number of blocks that loan has applied
+    /// @param _durationSecond The number of seconds that loan has last
     /// @param _interestType Interest rate per day in basis point applied to current loan
     /// @param _amount Loan value in wei
-    function calculateRepayAmount(uint256 _durationBlock, InterestType _interestType, uint256 _interestStartRate, uint256 _interestCapRate, uint256 _amount) public pure returns (uint256) {
-        uint256 durationInDays = _durationBlock/ 7200;
+    function calculateRepayAmount(uint256 _durationSecond, InterestType _interestType, uint256 _interestStartRate, uint256 _interestCapRate, uint256 _amount) public pure returns (uint256) {
+        uint256 durationInDays = _durationSecond/ 1 days;
         
         if (_interestType == InterestType.Linear) {
             return _amount + _amount * (_interestStartRate + durationInDays * _interestCapRate) / 10000;
@@ -164,7 +171,7 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
 
         require(loan.status == LoanStatus.Borrowed, "Invalid loan to repay");
         
-        uint256 requiredAmount = this.calculateRepayAmount(block.number - loan.blockNumber, loan.interestType, loan.interestStartRate, loan.interestCapRate, loan.amount);
+        uint256 requiredAmount = this.calculateRepayAmount(block.timestamp - loan.timestamp, loan.interestType, loan.interestStartRate, loan.interestCapRate, loan.amount);
 
         require(repaidAmount>= requiredAmount, "Not enough amount to repay the loan");
 
@@ -200,5 +207,28 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
 
         // Finalize loan
         loan.status = LoanStatus.Repaid;
+    }
+
+    /// @notice Liquidate the expired loan
+    /// @dev Check if the grace period is expired
+    /// @param _loan a parameter just like in doxygen (must be followed by parameter name)
+    function liquidate (address _loan) external {
+        Pool storage pool = pools[msg.sender];
+        Loan storage loan = loans[msg.sender][_loan];
+
+        require(loan.status == LoanStatus.Borrowed, "Invalid loan to liquidate");
+        require(block.timestamp > loan.timestamp + loan.duration * 1 days + 1 days, "Not expired the grace date");
+
+        // Take NFT item from escrow
+        IERC721(loan.collection).safeTransferFrom(address(this), msg.sender, loan.tokenId);
+
+        // Update pool
+        pool.totalLiquidations += loan.amount;
+        pool.updatedAt = block.timestamp;
+
+        // Update loan
+        loan.status = LoanStatus.Liquidated;
+
+        emit LiquidatedLoan(pool.owner, loan.borrower, loan.amount);
     }
 }

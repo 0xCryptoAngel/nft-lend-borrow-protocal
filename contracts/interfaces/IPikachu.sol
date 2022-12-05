@@ -100,7 +100,7 @@ interface IPikachu {
         address borrower;
         // amount:: amount of loan
         uint256 amount;
-        // duration:: loan duration
+        // duration:: loan duration in day
         uint256 duration;
         // collection:: NFT collection address used for collateral
         address collection;
@@ -110,6 +110,8 @@ interface IPikachu {
         LoanStatus status;
         // blockNumber:: block number at loan timestamp
         uint256 blockNumber;
+        // timestamp:: loan created timestamp
+        uint256 timestamp;
 
         // interestType:: Dynamic will use our own model, if set to manual, you have to provide fees per day to pay
         InterestType interestType;
@@ -120,10 +122,16 @@ interface IPikachu {
     }
     
     /// @notice pool creation event
-    event CreatedPool(address indexed owner, uint256 indexed poolId, uint256 amount);
+    event CreatedPool(address indexed poolOwner, uint256 indexed poolId, uint256 amount);
+
+    /// @notice loan creation event
+    event CreatedLoan(address indexed poolOwner, address indexed borrower, uint256 amount);
 
     /// @notice pool update event
-    event UpdatedPool(address indexed owner, uint256 indexed poolId);
+    event UpdatedPool(address indexed poolOwner, uint256 indexed poolId);
+
+    /// @notice liquidate loan
+    event LiquidatedLoan(address indexed poolOwner, address indexed borrower, uint256 amount);
 
     function borrow (address _poolOwner, address _collection, uint256 _tokenId, uint256 _duration, uint256 _amount, bytes memory _signature, uint256 _floorPrice, uint256 _blockNumber) external;
     function repay(address _poolOwner) external payable;
