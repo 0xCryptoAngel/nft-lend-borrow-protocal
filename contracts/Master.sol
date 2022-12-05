@@ -46,8 +46,8 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
         address[] memory _collections
     ) external payable {
         require(msg.value >= adminSetting.minDepositAmount, "createPool: Needs more coin to create pool");
-
         Pool storage newPool = pools[msg.sender];
+        require(newPool.status == PoolStatus.None, "createPool: Already exists");
         newPool.loanToValue = _loanToValue;
         newPool.maxAmount = _maxAmount;
         newPool.interestType = _interestType;
@@ -71,6 +71,54 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
         emit CreatedPool(msg.sender, totalPools, newPool.depositedAmount);
 
         totalPools ++;
+    }
+
+    /// @notice update a new pool with provided information
+    function updatePool(
+        uint256 _loanToValue,
+        uint256 _maxAmount,
+        InterestType _interestType,
+        uint256 _interestStartRate,
+        uint256 _interestCapRate,
+        uint256 _maxDuration,
+        bool _compound,
+        address[] memory _collections
+    ) external payable {
+        Pool storage pool = pools[msg.sender];
+        require(pool.status == PoolStatus.Ready, "Invalid Pool to update");
+        pool.loanToValue = _loanToValue;
+        pool.maxAmount = _maxAmount;
+        pool.interestType = _interestType;
+        pool.interestStartRate = _interestStartRate;
+        pool.interestCapRate = _interestCapRate;
+        pool.maxDuration = _maxDuration;
+        pool.compound = _compound;
+        pool.collections = _collections;
+        pool.updatedAt = block.timestamp;
+    }
+
+    
+
+    /// @notice Withdraw ETH from pool
+    /// @param _amount eth value to withdraw from own pool
+    function withdrawFromPool(uint256 _amount) external {
+        Pool storage pool = pools[msg.sender];
+        require(pool.status == PoolStatus.Ready, "Invalid Pool");
+        require(pool.availableAmount >= _amount, "Withdrawal amount exceeds the balance");
+        pool.availableAmount -= _amount;
+        pool.updatedAt = block.timestamp;
+        (bool sent,) = msg.sender.call{value: _amount}("");
+        require(sent, "Failed to send Ether");
+    }
+
+    /// @notice Deposit ETH to pool
+    function depositToPool() external payable {
+        Pool storage pool = pools[msg.sender];
+        require(pool.status == PoolStatus.Ready, "Invalid Pool");
+        uint256 _amount = msg.value;
+        pool.availableAmount += _amount;
+        pool.updatedAt = block.timestamp;
+        pool.depositedAmount += _amount;
     }
 
     function getPoolByOwner (address _owner) public view returns(Pool memory){
