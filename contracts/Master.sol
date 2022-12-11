@@ -48,6 +48,7 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
         require(msg.value >= adminSetting.minDepositAmount, "createPool: Needs more coin to create pool");
         Pool storage newPool = pools[msg.sender];
         require(newPool.status == PoolStatus.None, "createPool: Already exists");
+        require(this.isListedCollection(_collections), "createPool: Unsupported collections provided");
         newPool.loanToValue = _loanToValue;
         newPool.maxAmount = _maxAmount;
         newPool.interestType = _interestType;
@@ -65,8 +66,10 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
         newPool.depositedAt = block.timestamp;
         newPool.createdAt = block.timestamp;
         newPool.updatedAt = block.timestamp;
+        newPool.status = PoolStatus.Ready;
 
         poolOwners[totalPools] = msg.sender;
+
 
         emit CreatedPool(msg.sender, totalPools, newPool.depositedAmount);
 
@@ -85,7 +88,8 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
         address[] memory _collections
     ) external payable {
         Pool storage pool = pools[msg.sender];
-        require(pool.status == PoolStatus.Ready, "Invalid Pool to update");
+        require(pool.status == PoolStatus.Ready, "updatePool: Invalid Pool to update");
+        require(this.isListedCollection(_collections), "updatePool: Unsupported collections provided");
         pool.loanToValue = _loanToValue;
         pool.maxAmount = _maxAmount;
         pool.interestType = _interestType;
@@ -94,7 +98,26 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
         pool.maxDuration = _maxDuration;
         pool.compound = _compound;
         pool.collections = _collections;
+        pool.availableAmount += msg.value;
+        pool.depositedAmount += msg.value;
         pool.updatedAt = block.timestamp;
+    }
+
+    function isListedCollection(address[] memory _collections) public view returns (bool isListed) {
+        isListed = false;
+        
+        uint256 _i = 0;
+        uint256 _j = 0;
+        for (_i = 0; _i < _collections.length; _i++)
+            for (_j = 0; _j < adminSetting.verifiedCollections.length; _j++) {
+                if (_collections[_i] == adminSetting.verifiedCollections[_j]){
+                    isListed = true;
+                    break;
+            }
+            if (isListed == false)
+                break;
+            isListed = false;
+        }
     }
 
     
