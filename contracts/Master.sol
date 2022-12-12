@@ -5,20 +5,20 @@ pragma solidity ^0.8.9;
 import "hardhat/console.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "./interfaces/IPikachu.sol";
 import "./VerifySignature.sol";
-
-contract Pikachu is IPikachu, VerifySignature, Ownable {
+contract Pikachu is IPikachu, VerifySignature, Ownable, IERC721Receiver {
     uint256 constant BLOCK_PER_DAY = 7200;
 
     AdminSetting public adminSetting;
-
+    
     mapping (address => Pool) private pools;
     mapping (uint256 => address) public poolOwners;
     // totalPools:: total number of pools
     uint256 public totalPools;
 
-    mapping (address => mapping (address => Loan)) loans;
+    mapping (address => mapping (address => Loan)) public loans;
 
     modifier onlyCreator(uint256 poolId) {
         require(poolOwners[poolId] == msg.sender);
@@ -153,11 +153,13 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
     }
 
     function borrow (address _poolOwner, address _collection, uint256 _tokenId, uint256 _duration, uint256 _amount, bytes memory _signature, uint256 _floorPrice, uint256 _blockNumber) external {
-        require(verify(owner(), _collection, _floorPrice, _blockNumber , _signature), "Invalid Transaction");
-        require(block.number - _blockNumber <= adminSetting.blockNumberSlippage, "Must have updated floor price!");
-        require(_floorPrice >= _amount * 2, "Can't borrow more than 60% of the floor price");
+        require(verify(owner(), _collection, _floorPrice, _blockNumber , _signature), "borrow: Invalid Signature");
 
         Pool storage pool = pools[_poolOwner];
+
+        require(block.number - _blockNumber <= adminSetting.blockNumberSlippage, "Must have updated floor price!");
+        require(_floorPrice * pool.loanToValue / 100 >= _amount, "Can't borrow more than 60% of the floor price");
+
         require(pool.status == PoolStatus.Ready, "The pool is not active at the moment");
         require(pool.maxDuration >= _duration, "Request duration is longer than available duration");
 
@@ -246,12 +248,14 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
 
         require(repaidAmount>= requiredAmount, "Not enough amount to repay the loan");
 
-        // Resend rest of the Ether to borrower
-        (bool sent,) = msg.sender.call{value: repaidAmount - requiredAmount}("");
-        require(sent, "Failed to return Ether to msg.sender");
+        if (repaidAmount - requiredAmount > 0) {
+            // Resend rest of the Ether to borrower
+            (bool sent,) = msg.sender.call{value: repaidAmount - requiredAmount}("");
+            require(sent, "Failed to return Ether to msg.sender");
+        }
 
         uint256 netInterest = requiredAmount - loan.amount;
-        uint256 platformFee = netInterest * adminSetting.platformFee / 100;
+        uint256 platformFee = netInterest * adminSetting.platformFee / 10000;
         uint256 ownerInterest = netInterest - platformFee;
 
         
@@ -302,4 +306,8 @@ contract Pikachu is IPikachu, VerifySignature, Ownable {
 
         emit LiquidatedLoan(pool.owner, loan.borrower, loan.amount);
     }
+   function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
+        return IERC721Receiver.onERC721Received.selector;
+    }
+
 }
