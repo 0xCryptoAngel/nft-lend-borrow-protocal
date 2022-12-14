@@ -16,7 +16,7 @@ contract TestNFT is ERC721URIStorage {
         payable
         returns (uint256)
     {
-        require(msg.value == 1 ether, "Not enough Ether to mint token");
+        // require(msg.value == 1 ether, "Not enough Ether to mint token");
         uint256 newItemId = _tokenIds.current();
         _mint(player, newItemId);
         _setTokenURI(newItemId, tokenURI);

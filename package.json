@@ -5,6 +5,7 @@
   "scripts": {
     "localnode": "npx hardhat node",
     "deploy:local": "npx hardhat run --network localhost scripts/deploy.ts",
+    "deploy:mumbai": "npx hardhat run --network mumbai scripts/deploy.ts",
     "compile": "npx hardhat compile",
     "coverage": "npx hardhat coverage",
     "docgen": "npx hardhat docgen",
@@ -31,6 +32,7 @@
     "@types/mocha": "^9.1.0",
     "@types/node": ">=12.0.0",
     "chai": "^4.2.0",
+    "dotenv": "^16.0.3",
     "ethers": "^5.4.7",
     "hardhat": "^2.12.2",
     "hardhat-gas-reporter": "^1.0.8",

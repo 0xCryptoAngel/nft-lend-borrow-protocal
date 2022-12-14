@@ -15,7 +15,13 @@ async function main() {
   const Pikachu = await ethers.getContractFactory("Pikachu");
   const pikachu = await Pikachu.deploy(defaultAdminSetting);
 
-  console.log(pikachu.address, await ethers.provider.getBlockNumber());
+  const TestNFT = await ethers.getContractFactory("TestNFT");
+  const validTestNFT = await TestNFT.deploy();
+  const inValidTestNFT = await TestNFT.deploy();
+
+  console.log("Pikachu Address", pikachu.address);
+  console.log("NFT#1 Address", validTestNFT.address);
+  console.log("NFT#2 Address", inValidTestNFT.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

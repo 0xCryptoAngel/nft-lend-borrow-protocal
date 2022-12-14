@@ -1,5 +1,6 @@
 import { HardhatUserConfig, task } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
+require("dotenv").config();
 
 task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
   const accounts = await hre.ethers.getSigners();
@@ -25,6 +26,12 @@ const config: HardhatUserConfig = {
   },
 
   networks: {
+    mumbai: {
+      url: "https://rpc.ankr.com/polygon_mumbai",
+      accounts: {
+        mnemonic: process.env.NODE_ARRAY,
+      },
+    },
     hardhat: {
       forking: {
         url: "https://rpc.ankr.com/bsc",

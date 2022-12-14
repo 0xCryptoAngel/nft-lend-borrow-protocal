@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "./interfaces/IPikachu.sol";
 import "./VerifySignature.sol";
 contract Pikachu is IPikachu, VerifySignature, Ownable, IERC721Receiver {
-    uint256 constant BLOCK_PER_DAY = 7200;
+    // uint256 constant BLOCK_PER_DAY = 7200;
 
     AdminSetting public adminSetting;
     
@@ -32,6 +32,10 @@ contract Pikachu is IPikachu, VerifySignature, Ownable, IERC721Receiver {
     /// @notice Update system settings
     function updateAdminSetting(AdminSetting memory _adminSetting) onlyOwner public {
         adminSetting = _adminSetting;
+    }
+
+    function verifiedCollections() view public returns(address[] memory){
+        return adminSetting.verifiedCollections;
     }
 
     /// @notice Create a new pool with provided information
@@ -158,7 +162,7 @@ contract Pikachu is IPikachu, VerifySignature, Ownable, IERC721Receiver {
         Pool storage pool = pools[_poolOwner];
 
         require(block.number - _blockNumber <= adminSetting.blockNumberSlippage, "Must have updated floor price!");
-        require(_floorPrice * pool.loanToValue / 100 >= _amount, "Can't borrow more than 60% of the floor price");
+        require(_floorPrice * pool.loanToValue / 100 >= _amount, "Can't borrow more than LTV of the floor price");
 
         require(pool.status == PoolStatus.Ready, "The pool is not active at the moment");
         require(pool.maxDuration >= _duration, "Request duration is longer than available duration");
@@ -233,7 +237,7 @@ contract Pikachu is IPikachu, VerifySignature, Ownable, IERC721Receiver {
         
     }
 
-    /// @notice Replay for a loan with Ether and update pool, loan
+    /// @notice Repay for a loan with Ether and update pool, loan
     /// @dev Explain to a developer any extra details
     /// @param _poolOwner Pool that msg.sender used
     function repay(address _poolOwner) external payable {
