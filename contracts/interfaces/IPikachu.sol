@@ -125,14 +125,14 @@ interface IPikachu {
     event CreatedPool(address indexed poolOwner, uint256 indexed poolId, uint256 amount);
 
     /// @notice loan creation event
-    event CreatedLoan(address indexed poolOwner, address indexed borrower, uint256 amount);
+    event CreatedLoan(uint256 indexed poolId, address indexed borrower, uint256 amount);
 
     /// @notice pool update event
     event UpdatedPool(address indexed poolOwner, uint256 indexed poolId);
 
     /// @notice liquidate loan
-    event LiquidatedLoan(address indexed poolOwner, address indexed borrower, uint256 amount);
+    event LiquidatedLoan(uint256 indexed poolId, address indexed borrower, uint256 amount);
 
-    function borrow (address _poolOwner, address _collection, uint256 _tokenId, uint256 _duration, uint256 _amount, bytes memory _signature, uint256 _floorPrice, uint256 _blockNumber) external;
-    function repay(address _poolOwner) external payable;
+    function borrow (uint256 _poolId, address _collection, uint256 _tokenId, uint256 _duration, uint256 _amount, bytes memory _signature, uint256 _floorPrice, uint256 _blockNumber) external;
+    function repay(uint256 _poolId) external payable;
 }

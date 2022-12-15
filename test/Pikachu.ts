@@ -111,7 +111,7 @@ describe("Pikachu", function () {
     await pikachu
       .connect(thirdAccount)
       .borrow(
-        secondAccount.address,
+        0,
         validTestNFT.address,
         0,
         86400,
@@ -170,11 +170,33 @@ describe("Pikachu", function () {
     });
 
     it("Should update pool", async function () {
-      const { pikachu, validTestNFT, inValidTestNFT, secondAccount } =
-        await loadFixture(deployContractAndCreatePool);
+      const {
+        pikachu,
+        validTestNFT,
+        inValidTestNFT,
+        secondAccount,
+        thirdAccount,
+      } = await loadFixture(deployContractAndCreatePool);
+      await expect(
+        pikachu
+          .connect(thirdAccount)
+          .updatePool(
+            0,
+            60,
+            ethers.utils.parseEther("1"),
+            1,
+            550,
+            600,
+            87600 * 30,
+            false,
+            [validTestNFT.address],
+            { value: ethers.utils.parseEther("1") }
+          )
+      ).to.be.revertedWith("onlyCreator: Invalid owner");
       await pikachu
         .connect(secondAccount)
         .updatePool(
+          0,
           60,
           ethers.utils.parseEther("1"),
           1,
@@ -216,7 +238,7 @@ describe("Pikachu", function () {
       const tx = await pikachu
         .connect(thirdAccount)
         .borrow(
-          secondAccount.address,
+          0,
           validTestNFT.address,
           0,
           86400,
@@ -276,7 +298,7 @@ describe("Pikachu", function () {
 
       await time.increase(86400 * 10);
 
-      await pikachu.connect(thirdAccount).repay(secondAccount.address, {
+      await pikachu.connect(thirdAccount).repay(0, {
         value: ethers.utils.parseEther("0.5075"),
       });
     });
