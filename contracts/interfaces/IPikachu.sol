@@ -41,6 +41,8 @@ interface IPikachu {
     struct Pool {
         // owner:: Pool creator
         address owner;
+        // status:: Pool paused
+        bool paused;
         // status:: Pool status
         PoolStatus status;
         // depositedAmount:: Accumulated deposited amount
@@ -84,6 +86,13 @@ interface IPikachu {
         // compound:: if set to true, reinvest profit in pool, otherwise they are sent to your wallet
         bool compound;
         address[] collections;
+
+        // numberOfLoans: number of total loans
+        uint256 numberOfLoans;
+        // numberOfLoans: number of open loans
+        uint256 numberOfOpenLoans;
+        // numberOfLiquidations: number of total liquidated loans
+        uint256 numberOfLiquidations;
     }
 
     // Enum representing loan status

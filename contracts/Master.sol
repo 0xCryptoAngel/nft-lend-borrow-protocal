@@ -77,6 +77,16 @@ contract Pikachu is IPikachu, VerifySignature, Ownable, IERC721Receiver {
 
         totalPools ++;
     }
+    
+
+    /// @notice set availabilty of pool (paused)
+    function setPaused(
+        uint256 _poolId,
+        bool _paused
+    ) external payable onlyCreator(_poolId){
+        Pool storage pool = pools[_poolId];
+        pool.paused = _paused;
+    }
 
     /// @notice update a pool with provided information
     function updatePool(
@@ -188,6 +198,7 @@ contract Pikachu is IPikachu, VerifySignature, Ownable, IERC721Receiver {
         require(_floorPrice * pool.loanToValue / 100 >= _amount, "borrow: Can't borrow more than LTV of the floor price");
 
         require(pool.status == PoolStatus.Ready, "borrow: The pool is not active at the moment");
+        require(pool.paused == false, "borrow: The pool is paused by owner at the moment");
         require(pool.maxDuration >= _duration, "borrow: Request duration is longer than available duration");
 
         uint256 _i = 0;
@@ -231,6 +242,9 @@ contract Pikachu is IPikachu, VerifySignature, Ownable, IERC721Receiver {
         pool.nftLocked ++;
         pool.totalLoans += _amount;
         pool.lastLoanAt = block.timestamp;
+
+        pool.numberOfLoans ++;
+        pool.numberOfOpenLoans ++;
 
         emit CreatedLoan(_poolId, newLoan.borrower, newLoan.amount);
     }
@@ -302,6 +316,7 @@ contract Pikachu is IPikachu, VerifySignature, Ownable, IERC721Receiver {
         pool.availableAmount += loan.amount;
         pool.totalInterest += ownerInterest;
         pool.updatedAt = block.timestamp;
+        pool.numberOfOpenLoans --;
 
         // Finalize loan
         loan.status = LoanStatus.Repaid;
@@ -323,6 +338,8 @@ contract Pikachu is IPikachu, VerifySignature, Ownable, IERC721Receiver {
         // Update pool
         pool.totalLiquidations += loan.amount;
         pool.updatedAt = block.timestamp;
+        pool.numberOfOpenLoans --;
+        pool.numberOfLiquidations ++;
 
         // Update loan
         loan.status = LoanStatus.Liquidated;
